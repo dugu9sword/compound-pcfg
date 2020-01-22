@@ -6,6 +6,14 @@ import torch
 import nltk
 
 
+class V:
+    def __sub__(self, tsr):
+        for ele in tsr.__repr__().split('\n'):
+            print(ele)
+
+
+v = V()
+
 def all_binary_trees(n):
     #get all binary trees of length n
     def is_tree(tree, n):

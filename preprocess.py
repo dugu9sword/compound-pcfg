@@ -12,7 +12,7 @@ import itertools
 from collections import defaultdict
 import utils
 import re
-import pdb
+import ipdb
 
 
 class Indexer:
@@ -279,6 +279,7 @@ def get_data(args):
 
         # Write output
         f = {}
+        ipdb.set_trace()
         f["source"] = sents
         f["other_data"] = other_data
         f["batch_l"] = np.array(batch_l, dtype=int)

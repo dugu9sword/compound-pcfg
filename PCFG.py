@@ -6,6 +6,7 @@ import torch.nn.functional as F
 import numpy as np
 import itertools
 import random
+from utils import v
 
 
 class PCFG(nn.Module):
@@ -28,10 +29,10 @@ class PCFG(nn.Module):
             return torch.log(torch.exp(x - d.unsqueeze(dim).expand_as(x)).sum(dim)) + d
 
     def _inside(self, unary_scores, rule_scores, root_scores):
-        #inside step
-        #unary scores : b x n x T
-        #rule scores : b x NT  x (NT+T) x (NT+T)
-        #root : b x NT
+        # inside step
+        # unary scores : b x n x T
+        # rule scores : b x NT  x (NT+T) x (NT+T)
+        # root : b x NT
         batch_size = unary_scores.size(0)
         n = unary_scores.size(1)
         self.beta = unary_scores.new(batch_size, n, n, self.states).fill_(-self.huge)
@@ -74,8 +75,6 @@ class PCFG(nn.Module):
         return log_Z
 
     def _viterbi(self, unary_scores, rule_scores, root_scores):
-        #unary scores : b x n x T
-        #rule scores : b x NT x (NT+T) x (NT+T)
         batch_size = unary_scores.size(0)
         n = unary_scores.size(1)
         self.scores = unary_scores.new(batch_size, n, n, self.states).fill_(-self.huge)

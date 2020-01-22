@@ -1,3 +1,5 @@
+*.prof
+*.hjson
 *.pt
 *.amat
 *.mat

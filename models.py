@@ -4,7 +4,7 @@ import torch.nn.functional as F
 import numpy as np
 from PCFG import PCFG
 from random import shuffle
-
+from utils import v
 
 class ResidualLayer(nn.Module):
     def __init__(self, in_dim=100, out_dim=100):
@@ -27,18 +27,23 @@ class CompPCFG(nn.Module):
                  nt_states=10):
         super(CompPCFG, self).__init__()
         self.state_dim = state_dim
-        self.t_emb = nn.Parameter(torch.randn(t_states, state_dim))
-        self.nt_emb = nn.Parameter(torch.randn(nt_states, state_dim))
-        self.root_emb = nn.Parameter(torch.randn(1, state_dim))
-        self.pcfg = PCFG(nt_states, t_states)
         self.nt_states = nt_states
         self.t_states = t_states
         self.all_states = nt_states + t_states
-        self.dim = state_dim
+        
+        # t -> POS, nt -> Consitituents
+        self.t_emb = nn.Parameter(torch.randn(t_states, state_dim))
+        self.nt_emb = nn.Parameter(torch.randn(nt_states, state_dim))
+        self.root_emb = nn.Parameter(torch.randn(1, state_dim))
         self.register_parameter('t_emb', self.t_emb)
         self.register_parameter('nt_emb', self.nt_emb)
         self.register_parameter('root_emb', self.root_emb)
+
+        self.pcfg = PCFG(nt_states, t_states)
+
+        # NT -> [NT|T] [NT|T]
         self.rule_mlp = nn.Linear(state_dim + z_dim, self.all_states**2)
+        # ROOT -> NT
         self.root_mlp = nn.Sequential(nn.Linear(z_dim + state_dim, state_dim),
                                       ResidualLayer(state_dim, state_dim),
                                       ResidualLayer(state_dim, state_dim),
@@ -67,8 +72,7 @@ class CompPCFG(nn.Module):
 
     def forward(self, x, argmax=False, use_mean=False):
         #x : batch x n
-        n = x.size(1)
-        batch_size = x.size(0)
+        batch_size, n = x.size()
         if self.z_dim > 0:
             mean, logvar = self.enc(x)
             kl = self.kl(mean, logvar).sum(1)
@@ -96,12 +100,12 @@ class CompPCFG(nn.Module):
             t_emb = torch.cat([t_emb, z_expand], 3)
             nt_emb = torch.cat(
                 [nt_emb, z.unsqueeze(1).expand(batch_size, self.nt_states, self.z_dim)], 2)
-        root_scores = F.log_softmax(self.root_mlp(root_emb), 1)
-        unary_scores = F.log_softmax(self.vocab_mlp(t_emb), 3)
+        root_scores = F.log_softmax(self.root_mlp(root_emb), 1)  # shape: (bsz, nt)
+        unary_scores = F.log_softmax(self.vocab_mlp(t_emb), 3) # shape: (bsz, len, t, vocab)
         x_expand = x.unsqueeze(2).expand(batch_size, x.size(1), self.t_states).unsqueeze(3)
-        unary = torch.gather(unary_scores, 3, x_expand).squeeze(3)
-        rule_score = F.log_softmax(self.rule_mlp(nt_emb), 2)  # nt x t**2
-        rule_scores = rule_score.view(batch_size, self.nt_states, self.all_states, self.all_states)
+        unary = torch.gather(unary_scores, 3, x_expand).squeeze(3) # shape: (bsz, len, t)
+        rule_score = F.log_softmax(self.rule_mlp(nt_emb), 2)  # shape: (bsz, nt, (nt+t)^2 )
+        rule_scores = rule_score.view(batch_size, self.nt_states, self.all_states, self.all_states) # shape: (bsz, nt, (nt+t)^2 )
         log_Z = self.pcfg._inside(unary, rule_scores, root_scores)
         if self.z_dim == 0:
             kl = torch.zeros_like(log_Z)
